@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>Threat Intel Agent</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+:root {
+  --bg: #0f172a;
+  --bg-alt: #1e293b;
+  --bg-deep: #020617;
+  --border: #334155;
+  --accent: #38bdf8;
+  --accent-2: #a78bfa;
+  --success: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+}
+body {
+  background: var(--bg);
+  color: #e2e8f0;
+  font-family: -apple-system, "Segoe UI", "Noto Sans TC", sans-serif;
+}
+.card { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px; }
+.btn-primary {
+  background: var(--accent); color: var(--bg-deep); font-weight: 600;
+  padding: 10px 20px; border-radius: 6px; cursor: pointer;
+}
+.btn-primary:hover { background: #0ea5e9; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-ghost {
+  background: transparent; color: #94a3b8; padding: 8px 14px;
+  border-radius: 6px; border: 1px solid var(--border);
+  cursor: pointer; font-size: 13px;
+}
+.btn-ghost:hover { background: var(--bg-alt); color: #e2e8f0; }
+.btn-ghost.active {
+  background: rgba(56,189,248,0.1); color: var(--accent); border-color: var(--accent);
+}
+.risk-high { color: var(--danger); background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); }
+.risk-medium { color: var(--warn); background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3); }
+.risk-low { color: var(--success); background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3); }
+.risk-unknown { color: #94a3b8; background: rgba(148,163,184,0.1); border: 1px solid rgba(148,163,184,0.3); }
+.risk-badge {
+  display: inline-block; padding: 4px 12px; border-radius: 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.8px;
+}
+.tab-bar {
+  display: flex; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+}
+.tab {
+  padding: 10px 16px; color: #94a3b8; cursor: pointer;
+  border-bottom: 2px solid transparent; font-size: 13.5px; font-weight: 500;
+}
+.tab:hover { color: #e2e8f0; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spinner {
+  display: inline-block; width: 16px; height: 16px;
+  border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+}
+.hidden { display: none !important; }
+.evidence-card {
+  background: var(--bg-deep); border-left: 3px solid var(--accent);
+  padding: 12px 14px; border-radius: 4px; margin-bottom: 8px; font-size: 13px;
+}
+.evidence-card.high { border-left-color: var(--danger); }
+.evidence-card.medium { border-left-color: var(--warn); }
+.evidence-card.low { border-left-color: var(--success); }
+.history-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; background: var(--bg-deep);
+  border: 1px solid var(--border); border-radius: 6px;
+  margin-bottom: 6px; font-size: 13px; cursor: pointer;
+}
+.history-item:hover { background: var(--bg-alt); border-color: var(--accent); }
+.blocklist-row {
+  display: grid; grid-template-columns: 1fr 100px 100px 130px 60px;
+  gap: 12px; align-items: center; padding: 12px 14px;
+  background: var(--bg-deep); border: 1px solid var(--border);
+  border-radius: 6px; margin-bottom: 6px; font-size: 13px;
+}
+.badge-source { padding: 3px 8px; border-radius: 3px; font-size: 10px; font-weight: 700; }
+.badge-source.agent { background: rgba(167,139,250,0.15); color: var(--accent-2); }
+.badge-source.manual { background: rgba(148,163,184,0.15); color: #94a3b8; }
+.icon-btn {
+  background: transparent; color: #64748b; border: 1px solid var(--border);
+  border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 12px;
+}
+.icon-btn:hover { color: var(--danger); border-color: var(--danger); }
+.modal-backdrop {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+  display: flex; align-items: center; justify-content: center; z-index: 100;
+}
+.modal {
+  background: var(--bg-alt); border: 1px solid var(--border);
+  border-radius: 8px; padding: 24px; width: 90%; max-width: 480px;
+}
+.timeline-step {
+  padding: 12px 16px; background: var(--bg-deep);
+  border: 1px solid var(--border); border-radius: 6px;
+  margin-bottom: 10px; font-size: 13px;
+}
+.timeline-step.thinking { border-left: 3px solid var(--accent); }
+.timeline-step.tool_call { border-left: 3px solid var(--warn); }
+.timeline-step.tool_result { border-left: 3px solid var(--success); }
+</style>
+</head>
+<body>
+
+<div class="min-h-screen">
+  <header class="border-b" style="border-color: var(--border); background: var(--bg-deep);">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="text-2xl">🛡️</div>
+        <div>
+          <div class="font-bold text-lg">Threat Intel Agent</div>
+          <div class="text-xs text-slate-500">v0.1 · AI-powered IP/Domain risk analysis</div>
+        </div>
+      </div>
+      <div id="apiStatus" class="text-sm text-slate-400">
+        <span class="inline-block w-2 h-2 rounded-full bg-slate-500"></span> Connecting...
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-8">
+    <section class="grid grid-cols-4 gap-4 mb-8" id="statsCards"></section>
+
+    <div class="tab-bar">
+      <div class="tab active" data-tab="analyze" onclick="switchTab('analyze')">🔍 Analyze</div>
+      <div class="tab" data-tab="history" onclick="switchTab('history')">📅 History</div>
+      <div class="tab" data-tab="blocklist" onclick="switchTab('blocklist')">🚫 Blocklist</div>
+    </div>
+
+    <section id="tab-analyze">
+      <div class="card p-6 mb-6">
+        <label class="block text-sm text-slate-400 mb-2">🎯 Target (IP or domain)</label>
+        <div class="flex gap-3">
+          <input id="targetInput" type="text" placeholder="例:8.8.8.8"
+            class="flex-1 px-4 py-3 rounded-md bg-slate-950 border border-slate-700 text-white" />
+          <button id="analyzeBtn" class="btn-primary" onclick="doAnalyze()">
+            <span id="analyzeBtnText">▶ Analyze</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="loadingBox" class="card p-8 mb-6 hidden text-center">
+        <div class="spinner mb-3"></div>
+        <div class="text-slate-300">Agent 正在分析...</div>
+      </div>
+
+      <div id="errorBox" class="card p-4 mb-6 hidden" style="border-left: 3px solid var(--danger);">
+        <div class="text-red-400 font-semibold mb-1">❌ 分析失敗</div>
+        <div class="text-sm text-slate-400" id="errorMessage"></div>
+      </div>
+
+      <div id="resultBox" class="grid grid-cols-5 gap-6 hidden">
+        <div class="col-span-3"><div class="card p-6" id="reportCard"></div></div>
+        <div class="col-span-2"><div class="card p-6" id="timelineCard"></div></div>
+      </div>
+
+      <div id="emptyBox" class="card p-12 text-center">
+        <div class="text-5xl mb-3 opacity-50">🎯</div>
+        <div class="text-slate-400 mb-1">還沒有分析</div>
+        <div class="text-sm text-slate-600">貼上 IP 或 domain 開始</div>
+      </div>
+    </section>
+
+    <section id="tab-history" class="hidden">
+      <div class="card p-6">
+        <div class="font-semibold mb-4">📅 分析歷史</div>
+        <div id="historyList"></div>
+      </div>
+    </section>
+
+    <section id="tab-blocklist" class="hidden">
+      <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+          <div class="font-semibold">🚫 黑名單管理</div>
+          <button class="btn-primary text-sm" onclick="openAddBlocklistModal()">+ 手動加入</button>
+        </div>
+        <div id="blocklistList"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="addBlocklistModal" class="modal-backdrop hidden" onclick="if(event.target === this) closeAddBlocklistModal()">
+  <div class="modal">
+    <div class="text-lg font-semibold mb-4">➕ 手動加入黑名單</div>
+    <div class="mb-4">
+      <label class="block text-sm text-slate-400 mb-2">IP</label>
+      <input id="newBlockIp" type="text" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-white" />
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm text-slate-400 mb-2">理由</label>
+      <textarea id="newBlockReason" rows="2" class="w-full px-3 py-2 rounded bg-slate-950 border border-slate-700 text-white"></textarea>
+    </div>
+    <div class="flex justify-end gap-2">
+      <button class="btn-ghost" onclick="closeAddBlocklistModal()">取消</button>
+      <button class="btn-primary" onclick="submitAddBlocklist()">加入</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 統一 fetch 封裝
+// ============================================================
+async function apiCall(method, path, body) {
+  const opts = {
+    method: method,
+    headers: { 'Content-Type': 'application/json' }
+  };
+  if (body) opts.body = JSON.stringify(body);
+
+  const res = await fetch('/api/v1' + path, opts);
+  if (!res.ok) {
+    throw new Error('HTTP ' + res.status);
+  }
+  return res.json();
+}
+
+// ============================================================
+// 全域狀態
+// ============================================================
+let currentAnalysis = null;
+let historyCache = [];
+let blocklistCache = [];
+
+// ============================================================
+// RENDER FUNCTIONS
+// ============================================================
+
+function renderStats(stats) {
+  const cards = [
+    { label: '總分析次數', value: stats.total_analyses || 0, icon: '📊' },
+    { label: '高風險比例', value: ((stats.high_risk_ratio || 0) * 100).toFixed(0) + '%', icon: '⚠️' },
+    { label: '快取命中率', value: ((stats.cache_hit_rate || 0) * 100).toFixed(0) + '%', icon: '⚡' },
+    { label: '黑名單數量', value: stats.blocklist_size || 0, icon: '🚫' }
+  ];
+  const html = cards.map(function(c) {
+    return '<div class="card p-5">' +
+      '<div class="flex items-center justify-between mb-2">' +
+      '<span class="text-xs text-slate-500 uppercase">' + c.label + '</span>' +
+      '<span class="text-lg opacity-60">' + c.icon + '</span>' +
+      '</div>' +
+      '<div class="text-2xl font-bold text-white">' + c.value + '</div>' +
+      '</div>';
+  }).join('');
+  document.getElementById('statsCards').innerHTML = html;
+}
+
+function renderReport(data) {
+  const r = data.result || {};
+  const riskLevel = r.risk_level || 'UNKNOWN';
+  const riskClass = riskLevel.toLowerCase();
+  const evidence = r.evidence || [];
+
+  let evidenceHtml = '';
+  evidence.forEach(function(e) {
+    const conf = e.confidence || 'low';
+    evidenceHtml += '<div class="evidence-card ' + conf + '">' +
+      '<div class="flex items-center justify-between mb-1">' +
+      '<span class="font-semibold text-sm">' + e.source + '</span>' +
+      '<span class="text-xs text-slate-500">信心度:' + conf + '</span>' +
+      '</div>' +
+      '<div class="text-slate-400">' + e.finding + '</div>' +
+      '</div>';
+  });
+
+  const meta = data.metadata || {};
+  const durationSec = ((meta.duration_ms || 0) / 1000).toFixed(1);
+
+  const html = '<div>' +
+    '<div class="flex items-center justify-between mb-5 pb-4 border-b" style="border-color: var(--border);">' +
+    '<div>' +
+    '<div class="text-xs text-slate-500 mb-1">分析對象</div>' +
+    '<div class="font-mono text-lg text-sky-300">' + (data.target || '') + '</div>' +
+    '</div>' +
+    '<span class="risk-badge risk-' + riskClass + '" style="font-size: 14px; padding: 6px 16px;">' +
+    riskLevel + ' RISK' +
+    '</span>' +
+    '</div>' +
+    '<div class="mb-5">' +
+    '<div class="text-xs text-slate-500 uppercase mb-2">📝 摘要</div>' +
+    '<div class="text-sm text-slate-300">' + (r.summary || '') + '</div>' +
+    '</div>' +
+    '<div class="mb-5">' +
+    '<div class="text-xs text-slate-500 uppercase mb-2">📋 證據 (' + evidence.length + ')</div>' +
+    evidenceHtml +
+    '</div>' +
+    '<div class="mb-5 p-4 rounded" style="background: rgba(56,189,248,0.06); border-left: 3px solid var(--accent);">' +
+    '<div class="text-xs text-slate-400 uppercase mb-1">💡 建議動作</div>' +
+    '<div class="text-sm text-slate-200">' + (r.recommendation || '') + '</div>' +
+    '</div>' +
+    '<div class="text-xs text-slate-500 pt-4 border-t flex gap-4" style="border-color: var(--border);">' +
+    '<span>⏱ ' + durationSec + 's</span>' +
+    '<span>🔄 ' + (meta.iterations || 0) + ' iterations</span>' +
+    '<span>🔧 ' + (meta.tool_calls_count || 0) + ' tool calls</span>' +
+    '</div>' +
+    '</div>';
+
+  document.getElementById('reportCard').innerHTML = html;
+}
+
+function renderTimeline(steps) {
+  steps = steps || [];
+  const icons = { thinking: '🧠', tool_call: '🔧', tool_result: '📊' };
+  const titles = { thinking: 'Thinking', tool_call: 'Tool Call', tool_result: 'Result' };
+
+  let stepsHtml = '';
+  steps.forEach(function(s) {
+    let body = '';
+    if (s.type === 'thinking') {
+      body = '<div class="text-slate-400 text-xs">' + (s.content || '') + '</div>';
+    } else if (s.type === 'tool_call') {
+      body = '<div class="text-slate-400 text-xs">' + (s.tool_name || '') + '</div>';
+    } else if (s.type === 'tool_result') {
+      const cache = s.from_cache ? '🎯 cached' : 'fresh';
+      body = '<div class="text-slate-400 text-xs">' + (s.tool_name || '') + ' · ' + (s.duration_ms || 0) + 'ms · ' + cache + '</div>';
+    }
+
+    stepsHtml += '<div class="timeline-step ' + s.type + '">' +
+      '<div class="flex items-center justify-between mb-1">' +
+      '<span class="text-xs text-slate-500">iter ' + (s.iteration || 0) + '</span>' +
+      '</div>' +
+      '<div class="font-semibold text-sm mb-1">' + (icons[s.type] || '') + ' ' + (titles[s.type] || '') + '</div>' +
+      body +
+      '</div>';
+  });
+
+  const html = '<div>' +
+    '<div class="mb-4">' +
+    '<div class="font-semibold mb-1">🧠 Agent 思考過程</div>' +
+    '<div class="text-xs text-slate-500">共 ' + steps.length + ' 步</div>' +
+    '</div>' +
+    '<div>' + stepsHtml + '</div>' +
+    '</div>';
+
+  document.getElementById('timelineCard').innerHTML = html;
+}
+
+function renderHistory(list) {
+  list = list || [];
+  if (list.length === 0) {
+    document.getElementById('historyList').innerHTML =
+      '<div class="text-center py-8 text-slate-500 text-sm">沒有歷史紀錄</div>';
+    return;
+  }
+
+  let html = '';
+  list.forEach(function(h) {
+    const riskLevel = h.risk_level || 'UNKNOWN';
+    html += '<div class="history-item" onclick="showHistoryDetail(\'' + h.analysis_id + '\')">' +
+      '<span class="risk-badge risk-' + riskLevel.toLowerCase() + '">' + riskLevel + '</span>' +
+      '<div class="flex-1 min-w-0">' +
+      '<div class="font-mono text-sky-300 text-sm">' + (h.target || '') + '</div>' +
+      '<div class="text-xs text-slate-500 truncate">' + (h.summary || '') + '</div>' +
+      '</div>' +
+      '</div>';
+  });
+  document.getElementById('historyList').innerHTML = html;
+}
+
+function renderBlocklist(list) {
+  list = list || [];
+  if (list.length === 0) {
+    document.getElementById('blocklistList').innerHTML =
+      '<div class="text-center py-8 text-slate-500 text-sm">黑名單為空</div>';
+    return;
+  }
+
+  let html = '';
+  list.forEach(function(b) {
+    const risk = b.risk_level || 'MEDIUM';
+    const source = b.added_by || 'manual';
+    html += '<div class="blocklist-row">' +
+      '<div class="min-w-0">' +
+      '<div class="font-mono text-sky-300 mb-0.5">' + (b.ip || '') + '</div>' +
+      '<div class="text-xs text-slate-500 truncate">' + (b.reason || '') + '</div>' +
+      '</div>' +
+      '<div><span class="risk-badge risk-' + risk.toLowerCase() + '">' + risk + '</span></div>' +
+      '<div><span class="badge-source ' + source + '">' + (source === 'agent' ? '🤖 AGENT' : '👤 MANUAL') + '</span></div>' +
+      '<div class="text-xs text-slate-400">' + (b.expires_at || '').slice(0, 10) + '</div>' +
+      '<div><button class="icon-btn" onclick="removeFromBlocklist(\'' + b.ip + '\')">✕</button></div>' +
+      '</div>';
+  });
+  document.getElementById('blocklistList').innerHTML = html;
+}
+
+// ============================================================
+// ACTIONS
+// ============================================================
+
+async function doAnalyze() {
+  const target = document.getElementById('targetInput').value.trim();
+  if (!target) return;
+
+  document.getElementById('emptyBox').classList.add('hidden');
+  document.getElementById('resultBox').classList.add('hidden');
+  document.getElementById('errorBox').classList.add('hidden');
+  document.getElementById('loadingBox').classList.remove('hidden');
+  document.getElementById('analyzeBtn').disabled = true;
+  document.getElementById('analyzeBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
+
+  try {
+    const data = await apiCall('POST', '/analyses', { target: target });
+    currentAnalysis = data;
+    renderReport(data);
+    document.getElementById('resultBox').classList.remove('hidden');
+
+    // 思考過程另外抓,失敗不影響主流程
+    try {
+      const thinking = await apiCall('GET', '/analyses/' + data.analysis_id + '/thinking');
+      renderTimeline(thinking.steps || []);
+    } catch (e) {
+      console.log('thinking not available:', e.message);
+      document.getElementById('timelineCard').innerHTML = '<div class="text-slate-500 text-sm">思考過程尚未提供</div>';
+    }
+
+    // 更新其他區塊,失敗不影響
+    refreshStats();
+    refreshHistory();
+
+  } catch (err) {
+    console.log('analyze failed:', err.message);
+    document.getElementById('errorMessage').textContent = err.message;
+    document.getElementById('errorBox').classList.remove('hidden');
+  } finally {
+    document.getElementById('loadingBox').classList.add('hidden');
+    document.getElementById('analyzeBtn').disabled = false;
+    document.getElementById('analyzeBtnText').textContent = '▶ Analyze';
+  }
+}
+
+function switchTab(name) {
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(function(t) {
+    t.classList.toggle('active', t.dataset.tab === name);
+  });
+  const sections = document.querySelectorAll('[id^="tab-"]');
+  sections.forEach(function(s) {
+    s.classList.toggle('hidden', s.id !== 'tab-' + name);
+  });
+
+  if (name === 'history') refreshHistory();
+  if (name === 'blocklist') refreshBlocklist();
+}
+
+async function showHistoryDetail(id) {
+  try {
+    const data = await apiCall('GET', '/analyses/' + id);
+    currentAnalysis = data;
+    switchTab('analyze');
+    document.getElementById('emptyBox').classList.add('hidden');
+    document.getElementById('resultBox').classList.remove('hidden');
+    renderReport(data);
+    try {
+      const thinking = await apiCall('GET', '/analyses/' + id + '/thinking');
+      renderTimeline(thinking.steps || []);
+    } catch (e) {
+      console.log('thinking not available');
+    }
+  } catch (err) {
+    console.log('load detail failed:', err.message);
+  }
+}
+
+async function removeFromBlocklist(ip) {
+  if (!confirm('確定要移除 ' + ip + ' 嗎?')) return;
+  try {
+    await apiCall('DELETE', '/blocklist/' + ip);
+    refreshBlocklist();
+    refreshStats();
+  } catch (err) {
+    console.log('remove failed:', err.message);
+  }
+}
+
+function openAddBlocklistModal() {
+  document.getElementById('addBlocklistModal').classList.remove('hidden');
+}
+
+function closeAddBlocklistModal() {
+  document.getElementById('addBlocklistModal').classList.add('hidden');
+  document.getElementById('newBlockIp').value = '';
+  document.getElementById('newBlockReason').value = '';
+}
+
+async function submitAddBlocklist() {
+  const ip = document.getElementById('newBlockIp').value.trim();
+  const reason = document.getElementById('newBlockReason').value.trim() || '手動加入';
+  if (!ip) return;
+
+  try {
+    await apiCall('POST', '/blocklist', {
+      ip: ip,
+      reason: reason,
+      risk_level: 'HIGH'
+    });
+    closeAddBlocklistModal();
+    refreshBlocklist();
+    refreshStats();
+  } catch (err) {
+    console.log('add blocklist failed:', err.message);
+  }
+}
+
+// ============================================================
+// REFRESH — 每個獨立處理錯誤,一個掛不影響其他
+// ============================================================
+
+async function refreshStats() {
+  try {
+    const stats = await apiCall('GET', '/system/stats');
+    renderStats(stats);
+  } catch (err) {
+    console.log('stats not available:', err.message);
+    renderStats({});
+  }
+}
+
+async function refreshHistory() {
+  try {
+    const resp = await apiCall('GET', '/analyses');
+    historyCache = resp.items || resp || [];
+    renderHistory(historyCache);
+  } catch (err) {
+    console.log('history not available:', err.message);
+    renderHistory([]);
+  }
+}
+
+async function refreshBlocklist() {
+  try {
+    const resp = await apiCall('GET', '/blocklist');
+    blocklistCache = resp.items || resp || [];
+    renderBlocklist(blocklistCache);
+  } catch (err) {
+    console.log('blocklist not available:', err.message);
+    renderBlocklist([]);
+  }
+}
+
+async function checkConnection() {
+  const el = document.getElementById('apiStatus');
+  try {
+    await apiCall('GET', '/health');
+    el.innerHTML = '<span class="inline-block w-2 h-2 rounded-full" style="background: var(--success);"></span> API Connected';
+  } catch (err) {
+    console.log('health check failed:', err.message);
+    el.innerHTML = '<span class="inline-block w-2 h-2 rounded-full" style="background: var(--danger);"></span> API Disconnected';
+  }
+}
+
+// ============================================================
+// INIT — 每個獨立跑,不用 await 鏈,一個掛不影響其他
+// ============================================================
+window.addEventListener('DOMContentLoaded', function() {
+  checkConnection();
+  refreshStats();
+  refreshHistory();
+  refreshBlocklist();
+});
+</script>
+
+</body>
+</html>
