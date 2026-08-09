@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
 import os
+from fastapi.security import APIKeyHeader
 
 load_dotenv()
 BLOCKLIST_EXPIRE_DAYS = 30
@@ -11,7 +12,9 @@ ABUSEIPDB_REQUESTS_URL = "https://api.abuseipdb.com/api/v2/check"
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY")
 VIRUSTOTAL_IP_REQUESTS_URL = "https://www.virustotal.com/api/v3/ip_addresses/{}"
 VIRUSTOTAL_DOMAINS_REQUESTS_URL = "https://www.virustotal.com/api/v3/domains/{}"
-
+API_KEY = os.getenv("API_KEY")
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key")
+print(API_KEY)
 class AgentConfig:
     def __init__(self):
         

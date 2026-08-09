@@ -3,6 +3,9 @@ from uuid import uuid4
 from functools import wraps
 from time import time
 from cache import make_cache_key, set_cache, get_cache
+from fastapi import Security, HTTPException, status
+from config import API_KEY_HEADER, API_KEY
+
 def get_analysis_id(return_now= False):
     uid = uuid4().hex[:6]
     now = datetime.now(timezone.utc)
@@ -34,3 +37,11 @@ def iscache(name):
             return result, (False, )
         return wrap
     return decorator
+
+async def verify_api_key(key: str = Security(API_KEY_HEADER)):
+    if key != API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API key"
+        )
+    return key
