@@ -553,53 +553,53 @@
 
     // API Key 由後端注入(HTML template 或載入時抓)
 
-  //const API_KEY = window.API_KEY || '';
-  const API_KEY = 'depends';
+    //const API_KEY = window.API_KEY || '';
+    const API_KEY = 'depends';
 
-  /* ============================================================
-  API WRAPPER — 統一的 fetch 封裝
-  ============================================================ */
+    /* ============================================================
+    API WRAPPER — 統一的 fetch 封裝
+    ============================================================ */
 
-  async function apiCall(method, path, body = null, requiresAuth = true) {
-  const headers = { 'Content-Type': 'application/json' };
-  if (requiresAuth && API_KEY) headers['X-API-Key'] = API_KEY;
+    async function apiCall(method, path, body = null, requiresAuth = true) {
+      const headers = { 'Content-Type': 'application/json' };
+      if (requiresAuth && API_KEY) headers['X-API-Key'] = API_KEY;
 
-  const options = { method, headers };
-  if (body) options.body = JSON.stringify(body);
+      const options = { method, headers };
+      if (body) options.body = JSON.stringify(body);
 
-  const res = await fetch(`/api/v1${path}`, options);
+      const res = await fetch(`/api/v1${path}`, options);
 
-  if (!res.ok) {
-  let errDetail = res.statusText;
-  try {
-  const errBody = await res.json();
-  errDetail = errBody.detail || errBody.error || errDetail;
-  } catch {}
-  throw new Error(errDetail);
-  }
-  return res.json();
-  }
+      if (!res.ok) {
+        let errDetail = res.statusText;
+        try {
+          const errBody = await res.json();
+          errDetail = errBody.detail || errBody.error || errDetail;
+        } catch { }
+        throw new Error(errDetail);
+      }
+      return res.json();
+    }
 
-  /* ============================================================
-  STATE
-  ============================================================ */
-  let currentAnalysis = null;
-  let historyFilter = 'all';
-  let historyCache = [];
-  let blocklistCache = [];
+    /* ============================================================
+    STATE
+    ============================================================ */
+    let currentAnalysis = null;
+    let historyFilter = 'all';
+    let historyCache = [];
+    let blocklistCache = [];
 
-  /* ============================================================
-  RENDER FUNCTIONS
-  ============================================================ */
+    /* ============================================================
+    RENDER FUNCTIONS
+    ============================================================ */
 
-  function renderStats(stats) {
-  const cards = [
-  { label: '總分析次數', value: stats.total_analyses, icon: '📊' },
-  { label: '高風險比例', value: (stats.high_risk_ratio * 100).toFixed(0) + '%', icon: '⚠️' },
-  { label: '快取命中率', value: (stats.cache_hit_rate * 100).toFixed(0) + '%', icon: '⚡' },
-  { label: '黑名單數量', value: stats.blocklist_size, icon: '🚫' },
-  ];
-  document.getElementById('statsCards').innerHTML = cards.map(c => `
+    function renderStats(stats) {
+      const cards = [
+        { label: '總分析次數', value: stats.total_analyses, icon: '📊' },
+        { label: '高風險比例', value: (stats.high_risk_ratio * 100).toFixed(0) + '%', icon: '⚠️' },
+        { label: '快取命中率', value: (stats.cache_hit_rate * 100).toFixed(0) + '%', icon: '⚡' },
+        { label: '黑名單數量', value: stats.blocklist_size, icon: '🚫' },
+      ];
+      document.getElementById('statsCards').innerHTML = cards.map(c => `
   <div class="card p-5 fade-in">
     <div class="flex items-center justify-between mb-2">
       <span class="text-xs text-slate-500 uppercase tracking-wider">${c.label}</span>
@@ -608,19 +608,19 @@
     <div class="text-2xl font-bold text-white">${c.value}</div>
   </div>
   `).join('');
-  }
+    }
 
-  function renderHistory(list) {
-  const filtered = historyFilter === 'all' ? list : list.filter(h => h.risk_level === historyFilter);
-  document.getElementById('historyCount').textContent = `(${filtered.length})`;
+    function renderHistory(list) {
+      const filtered = historyFilter === 'all' ? list : list.filter(h => h.risk_level === historyFilter);
+      document.getElementById('historyCount').textContent = `(${filtered.length})`;
 
-  if (filtered.length === 0) {
-  document.getElementById('historyList').innerHTML =
-  `<div class="text-center py-8 text-slate-500 text-sm">沒有符合的歷史紀錄</div>`;
-  return;
-  }
+      if (filtered.length === 0) {
+        document.getElementById('historyList').innerHTML =
+          `<div class="text-center py-8 text-slate-500 text-sm">沒有符合的歷史紀錄</div>`;
+        return;
+      }
 
-  document.getElementById('historyList').innerHTML = filtered.map(h => `
+      document.getElementById('historyList').innerHTML = filtered.map(h => `
   <div class="history-item ${currentAnalysis?.analysis_id === h.analysis_id ? 'active' : ''}"
     onclick="showHistoryDetail('${h.analysis_id}')">
     <span class="risk-badge risk-${h.risk_level.toLowerCase()}">${h.risk_level}</span>
@@ -631,13 +631,13 @@
     <div class="text-xs text-slate-500 flex-shrink-0">${formatTime(h.created_at)}</div>
   </div>
   `).join('');
-  }
+    }
 
-  function renderReport(data) {
-  const r = data.result;
-  const riskClass = r.risk_level.toLowerCase();
+    function renderReport(data) {
+      const r = data.result;
+      const riskClass = r.risk_level.toLowerCase();
 
-  const evidenceHtml = (r.evidence || []).map(e => `
+      const evidenceHtml = (r.evidence || []).map(e => `
   <div class="evidence-card ${e.confidence === 'high' ? 'high' : e.confidence === 'medium' ? 'medium' : 'low'}">
     <div class="flex items-center justify-between mb-1">
       <span class="font-semibold text-sm">${e.source}</span>
@@ -647,7 +647,7 @@
   </div>
   `).join('');
 
-  document.getElementById('reportCard').innerHTML = `
+      document.getElementById('reportCard').innerHTML = `
   <div class="fade-in">
     <div class="flex items-center justify-between mb-5 pb-4 border-b" style="border-color: var(--border);">
       <div>
@@ -693,50 +693,50 @@
     </div>
   </div>
   `;
-  }
+    }
 
-  function renderTimeline(steps) {
-  const iconMap = { thinking: '🧠', tool_call: '🔧', tool_result: '📊' };
-  const titleMap = { thinking: 'Thinking', tool_call: 'Tool Call', tool_result: 'Result' };
+    function renderTimeline(steps) {
+      const iconMap = { thinking: '🧠', tool_call: '🔧', tool_result: '📊' };
+      const titleMap = { thinking: 'Thinking', tool_call: 'Tool Call', tool_result: 'Result' };
 
-  function truncateText(text, maxLen) {
-    if (text.length <= maxLen) return text;
-    return text.slice(0, maxLen) + '... (內容已截斷)';
-  }
+      function truncateText(text, maxLen) {
+        if (text.length <= maxLen) return text;
+        return text.slice(0, maxLen) + '... (內容已截斷)';
+      }
 
-  const stepsHtml = steps.map((s, i) => {
-  let bodyHtml = '';
-  if (s.type === 'thinking') {
-  bodyHtml = `<div class="step-content">${s.content}</div>`;
-  } else if (s.type === 'tool_call') {
-  const inputStr = truncateText(JSON.stringify(s.input), 300);
-  bodyHtml = `
+      const stepsHtml = steps.map((s, i) => {
+        let bodyHtml = '';
+        if (s.type === 'thinking') {
+          bodyHtml = `<div class="step-content">${s.content}</div>`;
+        } else if (s.type === 'tool_call') {
+          const inputStr = truncateText(JSON.stringify(s.input), 300);
+          bodyHtml = `
   <div class="step-content">
     <code>${s.tool_name}</code>
     <div class="mt-1 opacity-70 text-xs font-mono">input: ${inputStr}</div>
   </div>`;
-  } else if (s.type === 'tool_result') {
-  const cache = s.from_cache ? '<span class="text-purple-300">cached</span>' : '<span class="text-slate-500">fresh</span>';
-  const outputStr = truncateText(JSON.stringify(s.output), 300);
-  bodyHtml = `
+        } else if (s.type === 'tool_result') {
+          const cache = s.from_cache ? '<span class="text-purple-300">cached</span>' : '<span class="text-slate-500">fresh</span>';
+          const outputStr = truncateText(JSON.stringify(s.output), 300);
+          bodyHtml = `
   <div class="step-content">
     <div class="mb-1"><code>${s.tool_name}</code> → ${s.duration_ms}ms · ${cache}</div>
     <div class="opacity-70 text-xs font-mono">${outputStr}</div>
   </div>`;
-  }
+        }
 
-  return `
+        return `
   <div class="timeline-step ${s.type} slide-in" style="animation-delay: ${i * 60}ms;">
     <div class="step-header">
       <span>iter ${s.iteration}</span>
-      <span>${new Date(s.timestamp).toLocaleTimeString('en-US', {hour12: false})}</span>
+      <span>${new Date(s.timestamp).toLocaleTimeString('en-US', { hour12: false })}</span>
     </div>
     <div class="step-title">${iconMap[s.type]} ${titleMap[s.type]}</div>
     ${bodyHtml}
   </div>`;
-  }).join('');
+      }).join('');
 
-  document.getElementById('timelineCard').innerHTML = `
+      document.getElementById('timelineCard').innerHTML = `
   <div class="mb-4">
     <div class="font-semibold mb-1">🧠 Agent 思考過程</div>
     <div class="text-xs text-slate-500">共 ${steps.length} 步 · ${new Set(steps.map(s => s.iteration)).size} 輪 iteration
@@ -744,18 +744,18 @@
   </div>
   <div class="timeline">${stepsHtml}</div>
   `;
-  }
+    }
 
-  function renderBlocklist(list) {
-  document.getElementById('blocklistCount').textContent = `(${list.length})`;
+    function renderBlocklist(list) {
+      document.getElementById('blocklistCount').textContent = `(${list.length})`;
 
-  if (list.length === 0) {
-  document.getElementById('blocklistList').innerHTML =
-  `<div class="text-center py-8 text-slate-500 text-sm">黑名單目前是空的</div>`;
-  return;
-  }
+      if (list.length === 0) {
+        document.getElementById('blocklistList').innerHTML =
+          `<div class="text-center py-8 text-slate-500 text-sm">黑名單目前是空的</div>`;
+        return;
+      }
 
-  const headerHtml = `
+      const headerHtml = `
   <div class="blocklist-row"
     style="background: transparent; border: none; padding: 4px 14px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b;">
     <div>目標 / 理由</div>
@@ -765,7 +765,7 @@
     <div></div>
   </div>`;
 
-  const rowsHtml = list.map(b => `
+      const rowsHtml = list.map(b => `
   <div class="blocklist-row fade-in">
     <div class="min-w-0">
       <div class="font-mono text-sky-300 mb-0.5">${b.target}
@@ -779,177 +779,181 @@
     <div><button class="icon-btn" onclick="removeFromBlocklist('${b.target}')" title="移除">✕</button></div>
   </div>`).join('');
 
-  document.getElementById('blocklistList').innerHTML = headerHtml + rowsHtml;
-  }
+      document.getElementById('blocklistList').innerHTML = headerHtml + rowsHtml;
+    }
 
-  /* ============================================================
-  ACTIONS
-  ============================================================ */
+    /* ============================================================
+    ACTIONS
+    ============================================================ */
 
-  async function doAnalyze() {
-  const target = document.getElementById('targetInput').value.trim();
-  if (!target) return;
+    async function doAnalyze() {
+      const target = document.getElementById('targetInput').value.trim();
+      if (!target) return;
 
-  document.getElementById('emptyBox').classList.add('hidden');
-  document.getElementById('resultBox').classList.add('hidden');
-  document.getElementById('errorBox').classList.add('hidden');
-  document.getElementById('loadingBox').classList.remove('hidden');
-  document.getElementById('analyzeBtn').disabled = true;
-  document.getElementById('analyzeBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
+      document.getElementById('emptyBox').classList.add('hidden');
+      document.getElementById('resultBox').classList.add('hidden');
+      document.getElementById('errorBox').classList.add('hidden');
+      document.getElementById('loadingBox').classList.remove('hidden');
+      document.getElementById('analyzeBtn').disabled = true;
+      document.getElementById('analyzeBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
 
-  try {
-  // ① 建立分析
-  const data = await apiCall('POST', '/analyses', { target });
+      try {
+        // ① 建立分析
+        const data = await apiCall('POST', '/analyses', { target });
 
-  // ② 抓思考過程
-  const thinkingResp = await apiCall('GET', `/analyses/${data.analysis_id}/thinking`);
-  const steps = thinkingResp.steps || [];
+        // ② 抓思考過程
+        const thinkingResp = await apiCall('GET', `/analyses/${data.analysis_id}/thinking`);
+        const steps = thinkingResp.steps || [];
 
-  // ③ 渲染
-  currentAnalysis = data;
-  renderReport(data);
-  renderTimeline(steps);
-  document.getElementById('resultBox').classList.remove('hidden');
+        // ③ 渲染
+        currentAnalysis = data;
+        renderReport(data);
+        renderTimeline(steps);
+        document.getElementById('resultBox').classList.remove('hidden');
 
-  // ④ HIGH 提示
-  if (data.result.risk_level === 'HIGH') {
-  showToast('已自動加入黑名單', 'success');
-  }
+        // ④ HIGH 提示
+        if (data.result.risk_level === 'HIGH') {
+          showToast('已自動加入黑名單', 'success');
+        }
 
-  // ⑤ 重新抓 stats + history(拿最新的)
-  await refreshStats();
-  await refreshHistory();
+        // ⑤ 重新抓 stats + history(拿最新的)
+        await refreshStats();
+        await refreshHistory();
 
-  } catch (err) {
-  document.getElementById('errorMessage').textContent = err.message || '未知錯誤';
-  document.getElementById('errorBox').classList.remove('hidden');
-  } finally {
-  document.getElementById('loadingBox').classList.add('hidden');
-  document.getElementById('analyzeBtn').disabled = false;
-  document.getElementById('analyzeBtnText').textContent = '▶ Analyze';
-  }
-  }
+      } catch (err) {
+        document.getElementById('errorMessage').textContent = err.message || '未知錯誤';
+        document.getElementById('errorBox').classList.remove('hidden');
+      } finally {
+        document.getElementById('loadingBox').classList.add('hidden');
+        document.getElementById('analyzeBtn').disabled = false;
+        document.getElementById('analyzeBtnText').textContent = '▶ Analyze';
+      }
+    }
 
-  function quickTest(ip) {
-  document.getElementById('targetInput').value = ip;
-  doAnalyze();
-  }
+    function quickTest(ip) {
+      document.getElementById('targetInput').value = ip;
+      doAnalyze();
+    }
 
-  async function switchTab(name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
-  document.querySelectorAll('[id^="tab-"]').forEach(s => s.classList.toggle('hidden', s.id !== `tab-${name}`));
+    async function switchTab(name) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+      document.querySelectorAll('[id^="tab-"]').forEach(s => s.classList.toggle('hidden', s.id !== `tab-${name}`));
 
-  if (name === 'history') await refreshHistory();
-  if (name === 'blocklist') await refreshBlocklist();
-  }
+      if (name === 'history') await refreshHistory();
+      if (name === 'blocklist') await refreshBlocklist();
+    }
 
-  function filterHistory(level) {
-  historyFilter = level;
-  document.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b.dataset.filter === level));
-  renderHistory(historyCache);
-  }
+    function filterHistory(level) {
+      historyFilter = level;
+      document.querySelectorAll('[data-filter]').forEach(b => b.classList.toggle('active', b.dataset.filter === level));
+      renderHistory(historyCache);
+    }
 
-  async function showHistoryDetail(id) {
-  try {
-  // 切回 analyze tab
-  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'analyze'));
-  document.querySelectorAll('[id^="tab-"]').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-analyze'));
+    async function showHistoryDetail(id) {
+      try {
+        // 切回 analyze tab
+        document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'analyze'));
+        document.querySelectorAll('[id^="tab-"]').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-analyze'));
 
-  // 抓完整分析
-  const data = await apiCall('GET', `/analyses/${id}`);
-  const thinkingResp = await apiCall('GET', `/analyses/${id}/thinking`);
+        // 抓完整分析
+        const data = await apiCall('GET', `/analyses/${id}`);
+        const thinkingResp = await apiCall('GET', `/analyses/${id}/thinking`);
 
-  currentAnalysis = data;
-  document.getElementById('emptyBox').classList.add('hidden');
-  document.getElementById('resultBox').classList.remove('hidden');
-  renderReport(data);
-  renderTimeline(thinkingResp.steps || []);
-  } catch (err) {
-  showToast('讀取失敗:' + err.message, 'error');
-  }
-  }
+        currentAnalysis = data;
+        document.getElementById('emptyBox').classList.add('hidden');
+        document.getElementById('resultBox').classList.remove('hidden');
+        renderReport(data);
+        renderTimeline(thinkingResp.steps || []);
+      } catch (err) {
+        showToast('讀取失敗:' + err.message, 'error');
+      }
+    }
 
-  async function removeFromBlocklist(target) {
-  if (!confirm(`確定要移除 ${target} 嗎?`)) return;
-  try {
-  await apiCall('DELETE', `/blocklist/${target}`);
-  showToast(`已移除 ${target}`, 'success');
-  await refreshBlocklist();
-  await refreshStats();
-  } catch (err) {
-  showToast('移除失敗:' + err.message, 'error');
-  }
-  }
+    async function removeFromBlocklist(target) {
+      if (!confirm(`確定要移除 ${target} 嗎?`)) return;
+      try {
+        await apiCall('DELETE', `/blocklist/${target}`);
+        showToast(`已移除 ${target}`, 'success');
+        await refreshBlocklist();
+        await refreshStats();
+      } catch (err) {
+        showToast('移除失敗:' + err.message, 'error');
+      }
+    }
 
-  /* ============================================================
-  REFRESH FUNCTIONS — 從後端拉最新資料
-  ============================================================ */
+    /* ============================================================
+    REFRESH FUNCTIONS — 從後端拉最新資料
+    ============================================================ */
 
-  async function refreshStats() {
-  try {
-  const stats = await apiCall('GET', '/system/stats', null, false);
-  renderStats(stats);
-  } catch (err) {
-  console.error('refresh stats failed:', err);
-  }
-  }
+    async function refreshStats() {
+      try {
+        const stats = await apiCall('GET', '/system/stats', null, false);
+        renderStats(stats);
+      } catch (err) {
+        console.error('refresh stats failed:', err);
+      }
+    }
 
-  async function refreshHistory() {
-  try {
-  const resp = await apiCall('GET', '/analyses?limit=50');
-  historyCache = resp.items || resp; // 支援兩種格式
-  renderHistory(historyCache);
-  } catch (err) {
-  console.error('refresh history failed:', err);
-  }
-  }
+    async function refreshHistory() {
+      try {
+        const resp = await apiCall('GET', '/analyses?limit=50');
+        historyCache = resp.items || resp; // 支援兩種格式
+        renderHistory(historyCache);
+      } catch (err) {
+        console.error('refresh history failed:', err);
+      }
+    }
 
-  async function refreshBlocklist() {
-  try {
-  const resp = await apiCall('GET', '/blocklist');
-  blocklistCache = resp.items || resp;
-  renderBlocklist(blocklistCache);
-  } catch (err) {
-  console.error('refresh blocklist failed:', err);
-  }
-  }
+    async function refreshBlocklist() {
+      try {
+        const resp = await apiCall('GET', '/blocklist');
+        blocklistCache = resp.items || resp;
+        renderBlocklist(blocklistCache);
+      } catch (err) {
+        console.error('refresh blocklist failed:', err);
+      }
+    }
 
-  async function checkConnection() {
-  const el = document.getElementById('apiStatus');
-  try {
-  await apiCall('GET', '/health', null, false);
-  el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background: var(--success);"></span><span>API
+    async function checkConnection() {
+      const el = document.getElementById('apiStatus');
+      try {
+        await apiCall('GET', '/system/health', null, false);
+        el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background: var(--success);"></span><span>API
     Connected</span>`;
-  } catch {
-  el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background: var(--danger);"></span><span
+      } catch {
+        el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background: var(--danger);"></span><span
     class="text-red-400">API Disconnected</span>`;
-  }
-  }
+      }
+    }
 
-  /* ============================================================
-  UTILS
-  ============================================================ */
+    /* ============================================================
+    UTILS
+    ============================================================ */
 
-  function formatTime(iso) {
-  const d = new Date(iso);
-  const diff = (new Date() - d) / 1000;
-  if (diff < 60) return '剛剛' ; if (diff < 3600) return `${Math.floor(diff/60)} 分前`; if (diff < 86400) return
-    `${Math.floor(diff/3600)} 小時前`; return d.toLocaleDateString(); } function formatDate(iso) { return new
-    Date(iso).toISOString().slice(0, 10); } function showToast(msg, type) { const t=document.createElement('div');
-    t.className=`toast ${type==='error' ? 'error' : '' }`; t.textContent=msg; document.body.appendChild(t);
-    setTimeout(()=> t.remove(), 2500);
+    function formatTime(iso) {
+      const d = new Date(iso);
+      const diff = (new Date() - d) / 1000;
+      if (diff < 60) return '剛剛'; if (diff < 3600) return `${Math.floor(diff / 60)} 分前`; if (diff < 86400) return
+      `${Math.floor(diff / 3600)} 小時前`; return d.toLocaleDateString();
+    } function formatDate(iso) {
+      return new
+        Date(iso).toISOString().slice(0, 10);
+    } function showToast(msg, type) {
+      const t = document.createElement('div');
+      t.className = `toast ${type === 'error' ? 'error' : ''}`; t.textContent = msg; document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2500);
     }
 
     /* ============================================================
     INIT
     ============================================================ */
     window.addEventListener('DOMContentLoaded', async () => {
-    await checkConnection();
-    await refreshStats();
-    await refreshHistory();
-    await refreshBlocklist();
+      await checkConnection();
+      await refreshStats();
+      await refreshHistory();
+      await refreshBlocklist();
     });
-    </script>
+  </script>
 
 </body>
 
