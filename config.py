@@ -8,11 +8,12 @@ MONGODB_URL = os.getenv("MONGODB_URL")
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY")
 ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY")
+API_KEY = os.getenv("API_KEY")
+
 ABUSEIPDB_REQUESTS_URL = "https://api.abuseipdb.com/api/v2/check"
-VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY")
 VIRUSTOTAL_IP_REQUESTS_URL = "https://www.virustotal.com/api/v3/ip_addresses/{}"
 VIRUSTOTAL_DOMAINS_REQUESTS_URL = "https://www.virustotal.com/api/v3/domains/{}"
-API_KEY = os.getenv("API_KEY")
+
 API_KEY_HEADER = APIKeyHeader(name="X-API-Key")
 
 class AgentConfig:

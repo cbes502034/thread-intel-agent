@@ -97,7 +97,7 @@ async def get_analysis_thinking(analysis_id: str, request: Request):
     cursor = collection.find({"analysis_id": analysis_id}).sort("timestamp", 1)
     docs = await cursor.to_list()
     for doc in docs:
-        doc["timestamp"].isoformat()
+        doc["timestamp"] = doc["timestamp"].isoformat()
         doc.pop("_id", None)
         
         

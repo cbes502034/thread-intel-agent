@@ -27,7 +27,7 @@ def duration(fun):
 def iscache(name):
     def decorator(fun):
         @wraps(fun)
-        async def wrap(arg, collection, *args):
+        async def wrap(arg, collection):
             cache_key = make_cache_key(name, arg)
             cache = await get_cache(collection, cache_key)
             if cache:
