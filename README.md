@@ -214,20 +214,34 @@ AbuseIPDB 與 VirusTotal 的回應皆以 `{"data": {...}}` 形式包裝實際內
 
 ### Collection 存取方式
 
-MongoDB 連線於應用程式啟動時（`lifespan`）建立一次，各 collection 的操作介面掛載於 `app.state`，供各 router 透過 `request.app.state.{collection}` 取用，避免每次請求重複建立連線：
+資料庫的連線與釋放邏輯集中於 `database.py`，以 FastAPI 的 `lifespan` 機制管理生命週期。連線於應用程式啟動時建立一次，各 collection 的操作介面掛載於 `app.state`，供各 router 透過 `request.app.state.{collection}` 取用，避免每次請求重複建立連線：
 
 ```python
+# database.py
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     client = AsyncMongoClient(MONGODB_URL)
     db = client["threat_intel"]
+
     app.state.analyses = db["analyses"]
     app.state.blocklist = db["blocklist"]
     app.state.cache = db["cache"]
     app.state.tool_calls = db["tool_calls"]
+
     yield
     client.close()
 ```
+
+`main.py` 只需引入並掛載，本身不涉及任何資料庫細節：
+
+```python
+# main.py
+from database import lifespan
+
+app = FastAPI(lifespan=lifespan)
+```
+
+這讓 `main.py` 的職責單純化為「組裝應用程式」——連線設定、資料庫名稱、collection 命名等細節都封裝在 `database.py`，未來若要更換資料庫或調整連線策略，修改範圍不會擴散到入口檔案。
 
 ---
 
@@ -329,7 +343,8 @@ fi
 
 ```
 thread-intel-agent/
-├── main.py              # 應用程式入口、生命週期管理、路由掛載
+├── main.py              # 應用程式入口、路由掛載
+├── database.py          # MongoDB 連線與生命週期管理
 ├── config.py            # 環境變數、Agent 設定(system prompt、tools schema)
 ├── agent.py             # AI class:Tool Use 迴圈核心邏輯
 ├── utils.py             # 快取裝飾器、計時裝飾器、ID 產生、API Key 驗證
@@ -351,11 +366,15 @@ thread-intel-agent/
 路由依職責拆分為獨立模組。`main.py` 以巢狀 `APIRouter` 統一管理版本前綴，各功能模組的 router 掛載於其下：
 
 ```python
+from database import lifespan
+from routers import analyses, blocklist, system
+
 main_router = APIRouter(prefix="/api/v1")
 main_router.include_router(analyses.router)   # router 內部 prefix="/analyses"
 main_router.include_router(blocklist.router)  # router 內部 prefix="/blocklist"
 main_router.include_router(system.router)     # router 內部 prefix="/system"
 
+app = FastAPI(lifespan=lifespan)
 app.include_router(main_router)
 ```
 
