@@ -31,7 +31,7 @@ class CounterThread(QThread):
 
     # 自鄧一個"停止"的方法,讓外部可以喊停
     def stop(self):
-        self.running = False
+        self._running = False
 
 def update_label(count):
     """當背景執行續emit訊號時,這個函式會被呼叫,拿到傳來的數字"""
