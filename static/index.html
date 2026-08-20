@@ -160,6 +160,10 @@
       border-color: var(--success);
     }
 
+    .timeline-step.report::before {
+      border-color: var(--accent-2);
+    }
+
     .step-header {
       display: flex;
       justify-content: space-between;
@@ -533,6 +537,18 @@
             💡 <strong>對接使用</strong>:防火牆可透過 <code class="text-sky-300">GET /api/v1/blocklist/check/&lt;ip&gt;</code>
             快速查詢
           </div>
+          <div class="mb-4 pb-4 border-b" style="border-color: var(--border);">
+            <label class="block text-xs text-slate-400 mb-2">
+              🔑 Admin Key <span class="text-slate-600">— 移除黑名單項目才需要,只存在這個瀏覽分頁,不會寫進程式碼</span>
+            </label>
+            <div class="flex gap-2">
+              <input id="adminKeyInput" type="password" placeholder="貼上 ADMIN_API_KEY"
+                class="flex-1 px-3 py-2 rounded-md bg-slate-950 border border-slate-700 focus:border-sky-400 focus:outline-none text-white text-sm" />
+              <button class="btn-ghost" id="saveAdminKeyBtn">儲存</button>
+              <button class="btn-ghost" id="clearAdminKeyBtn">清除</button>
+            </div>
+            <div class="text-xs mt-2" id="adminKeyStatus"></div>
+          </div>
           <div id="blocklistList"></div>
         </div>
       </section>
@@ -548,21 +564,75 @@
   <script>
     /* ============================================================
        前端不用改任何東西,除非後端 API 契約變動。
-       後端只要照下面的契約寫,前端 fetch 就會自動對上。
+       後端只要照 docs/backend_contract.md 寫,前端 fetch 就會自動對上。
        ============================================================ */
 
-    // API Key 由後端注入(HTML template 或載入時抓)
+    /* ============================================================
+    輸出跳脫 — 所有插進 innerHTML 的值都必須先過這裡
+    ------------------------------------------------------------
+    分析目標由使用者輸入、會存進資料庫並重播給所有訪客;summary 與
+    evidence 則來自 LLM 的輸出。兩者都是不可信來源,直接塞進 innerHTML
+    等於開了一個 stored XSS,而且 LLM 那條路徑可以用 prompt injection 觸發。
+    ============================================================ */
+    const ESCAPE_MAP = {
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    };
 
-    //const API_KEY = window.API_KEY || '';
-    const API_KEY = 'depends';
+    function esc(value) {
+      if (value === null || value === undefined) return '';
+      return String(value).replace(/[&<>"']/g, ch => ESCAPE_MAP[ch]);
+    }
+
+    /* ============================================================
+    ADMIN KEY — 只存在這個瀏覽分頁,絕不寫死在原始碼裡
+    ------------------------------------------------------------
+    舊版把金鑰以字面值寫死在這支檔案裡,任何人打開網頁原始碼都拿得到,
+    等於這層驗證形同虛設。現在分析端點改用伺服器端的用量限制保護,
+    金鑰只用於會改變系統狀態的管理操作,並且由使用者自行輸入。
+    ============================================================ */
+    const ADMIN_KEY_STORAGE = 'tia_admin_key';
+
+    function getAdminKey() {
+      return sessionStorage.getItem(ADMIN_KEY_STORAGE) || '';
+    }
+
+    function setAdminKey(value) {
+      if (value) sessionStorage.setItem(ADMIN_KEY_STORAGE, value);
+      else sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+      renderAdminKeyStatus();
+    }
+
+    function renderAdminKeyStatus() {
+      const el = document.getElementById('adminKeyStatus');
+      if (!el) return;
+      el.innerHTML = getAdminKey()
+        ? '<span class="text-emerald-400">✓ 已設定(僅存於本分頁)</span>'
+        : '<span class="text-slate-500">未設定 — 移除黑名單項目會被拒絕</span>';
+    }
 
     /* ============================================================
     API WRAPPER — 統一的 fetch 封裝
     ============================================================ */
+    function formatError(body) {
+      if (!body) return '';
+      const detail = body.detail;
+      if (typeof detail === 'string') return detail;
+      // FastAPI 的 422 會回傳陣列形式的驗證錯誤
+      if (Array.isArray(detail)) {
+        return detail.map(e => e.msg || JSON.stringify(e)).join(';');
+      }
+      return body.error || '';
+    }
 
-    async function apiCall(method, path, body = null, requiresAuth = true) {
-      const headers = { 'Content-Type': 'application/json' };
-      if (requiresAuth && API_KEY) headers['X-API-Key'] = API_KEY;
+    async function apiCall(method, path, body = null, { admin = false } = {}) {
+      const headers = {};
+      if (body) headers['Content-Type'] = 'application/json';
+
+      if (admin) {
+        const key = getAdminKey();
+        if (!key) throw new Error('這個操作需要 Admin Key,請先在上方填入');
+        headers['X-API-Key'] = key;
+      }
 
       const options = { method, headers };
       if (body) options.body = JSON.stringify(body);
@@ -572,11 +642,13 @@
       if (!res.ok) {
         let errDetail = res.statusText;
         try {
-          const errBody = await res.json();
-          errDetail = errBody.detail || errBody.error || errDetail;
+          errDetail = formatError(await res.json()) || errDetail;
         } catch { }
+        if (res.status === 401) errDetail = 'Admin Key 不正確';
         throw new Error(errDetail);
       }
+
+      if (res.status === 204) return null;
       return res.json();
     }
 
@@ -602,12 +674,18 @@
       document.getElementById('statsCards').innerHTML = cards.map(c => `
   <div class="card p-5 fade-in">
     <div class="flex items-center justify-between mb-2">
-      <span class="text-xs text-slate-500 uppercase tracking-wider">${c.label}</span>
-      <span class="text-lg opacity-60">${c.icon}</span>
+      <span class="text-xs text-slate-500 uppercase tracking-wider">${esc(c.label)}</span>
+      <span class="text-lg opacity-60">${esc(c.icon)}</span>
     </div>
-    <div class="text-2xl font-bold text-white">${c.value}</div>
+    <div class="text-2xl font-bold text-white">${esc(c.value)}</div>
   </div>
   `).join('');
+    }
+
+    function riskClassOf(level) {
+      const known = ['high', 'medium', 'low', 'unknown'];
+      const normalized = String(level || 'unknown').toLowerCase();
+      return known.includes(normalized) ? normalized : 'unknown';
     }
 
     function renderHistory(list) {
@@ -622,46 +700,50 @@
 
       document.getElementById('historyList').innerHTML = filtered.map(h => `
   <div class="history-item ${currentAnalysis?.analysis_id === h.analysis_id ? 'active' : ''}"
-    onclick="showHistoryDetail('${h.analysis_id}')">
-    <span class="risk-badge risk-${h.risk_level.toLowerCase()}">${h.risk_level}</span>
+    data-action="show-analysis" data-analysis-id="${esc(h.analysis_id)}">
+    <span class="risk-badge risk-${riskClassOf(h.risk_level)}">${esc(h.risk_level)}</span>
     <div class="flex-1 min-w-0">
-      <div class="font-mono text-sky-300 text-sm truncate">${h.target}</div>
-      <div class="text-xs text-slate-500 truncate mt-0.5">${h.summary || ''}</div>
+      <div class="font-mono text-sky-300 text-sm truncate">${esc(h.target)}</div>
+      <div class="text-xs text-slate-500 truncate mt-0.5">${esc(h.summary || '')}</div>
     </div>
-    <div class="text-xs text-slate-500 flex-shrink-0">${formatTime(h.created_at)}</div>
+    <div class="text-xs text-slate-500 flex-shrink-0">${esc(formatTime(h.created_at))}</div>
   </div>
   `).join('');
     }
 
     function renderReport(data) {
-      const r = data.result;
-      const riskClass = r.risk_level.toLowerCase();
+      const r = data.result || {};
+      const meta = data.metadata || {};
+      const riskClass = riskClassOf(r.risk_level);
 
-      const evidenceHtml = (r.evidence || []).map(e => `
-  <div class="evidence-card ${e.confidence === 'high' ? 'high' : e.confidence === 'medium' ? 'medium' : 'low'}">
+      const evidenceHtml = (r.evidence || []).map(e => {
+        const confidence = ['high', 'medium', 'low'].includes(e.confidence) ? e.confidence : 'low';
+        return `
+  <div class="evidence-card ${confidence}">
     <div class="flex items-center justify-between mb-1">
-      <span class="font-semibold text-sm">${e.source}</span>
-      <span class="text-xs text-slate-500">信心度:${e.confidence}</span>
+      <span class="font-semibold text-sm">${esc(e.source)}</span>
+      <span class="text-xs text-slate-500">信心度:${esc(confidence)}</span>
     </div>
-    <div class="text-slate-400">${e.finding}</div>
+    <div class="text-slate-400">${esc(e.finding)}</div>
   </div>
-  `).join('');
+  `;
+      }).join('');
 
       document.getElementById('reportCard').innerHTML = `
   <div class="fade-in">
     <div class="flex items-center justify-between mb-5 pb-4 border-b" style="border-color: var(--border);">
       <div>
         <div class="text-xs text-slate-500 mb-1">分析對象</div>
-        <div class="font-mono text-lg text-sky-300">${data.target}</div>
+        <div class="font-mono text-lg text-sky-300">${esc(data.target)}</div>
       </div>
       <span class="risk-badge risk-${riskClass}" style="font-size: 14px; padding: 6px 16px;">
-        ${r.risk_level} RISK
+        ${esc(r.risk_level)} RISK
       </span>
     </div>
 
     <div class="mb-5">
       <div class="text-xs text-slate-500 uppercase tracking-wider mb-2">📝 摘要</div>
-      <div class="text-sm leading-relaxed text-slate-300">${r.summary}</div>
+      <div class="text-sm leading-relaxed text-slate-300">${esc(r.summary)}</div>
     </div>
 
     <div class="mb-5">
@@ -671,7 +753,7 @@
 
     <div class="mb-5 p-4 rounded" style="background: rgba(56,189,248,0.06); border-left: 3px solid var(--accent);">
       <div class="text-xs text-slate-400 uppercase tracking-wider mb-1">💡 建議動作</div>
-      <div class="text-sm text-slate-200">${r.recommendation}</div>
+      <div class="text-sm text-slate-200">${esc(r.recommendation)}</div>
     </div>
 
     ${r.risk_level === 'HIGH' ? `
@@ -686,18 +768,19 @@
     ` : ''}
 
     <div class="text-xs text-slate-500 pt-4 border-t flex flex-wrap gap-4" style="border-color: var(--border);">
-      <span>⏱ ${(data.metadata.duration_ms / 1000).toFixed(1)}s</span>
-      <span>🔄 ${data.metadata.iterations} iterations</span>
-      <span>🔧 ${data.metadata.tool_calls_count} tool calls</span>
-      <span>🎯 ${data.metadata.cache_hits} cache hits</span>
+      <span>⏱ ${esc(((meta.duration_ms || 0) / 1000).toFixed(1))}s</span>
+      <span>🔄 ${esc(meta.iterations || 0)} iterations</span>
+      <span>🔧 ${esc(meta.tool_calls_count || 0)} tool calls</span>
+      <span>🎯 ${esc(meta.cache_hits || 0)} cache hits</span>
+      <span>🪙 ${esc((meta.input_tokens || 0) + (meta.output_tokens || 0))} tokens</span>
     </div>
   </div>
   `;
     }
 
     function renderTimeline(steps) {
-      const iconMap = { thinking: '🧠', tool_call: '🔧', tool_result: '📊' };
-      const titleMap = { thinking: 'Thinking', tool_call: 'Tool Call', tool_result: 'Result' };
+      const iconMap = { thinking: '🧠', tool_call: '🔧', tool_result: '📊', report: '📝' };
+      const titleMap = { thinking: 'Thinking', tool_call: 'Tool Call', tool_result: 'Result', report: 'Final Report' };
 
       function truncateText(text, maxLen) {
         if (text.length <= maxLen) return text;
@@ -707,31 +790,43 @@
       const stepsHtml = steps.map((s, i) => {
         let bodyHtml = '';
         if (s.type === 'thinking') {
-          bodyHtml = `<div class="step-content">${s.content}</div>`;
+          bodyHtml = `<div class="step-content">${esc(s.content)}</div>`;
         } else if (s.type === 'tool_call') {
           const inputStr = truncateText(JSON.stringify(s.input), 300);
           bodyHtml = `
   <div class="step-content">
-    <code>${s.tool_name}</code>
-    <div class="mt-1 opacity-70 text-xs font-mono">input: ${inputStr}</div>
+    <code>${esc(s.tool_name)}</code>
+    <div class="mt-1 opacity-70 text-xs font-mono">input: ${esc(inputStr)}</div>
   </div>`;
         } else if (s.type === 'tool_result') {
-          const cache = s.from_cache ? '<span class="text-purple-300">cached</span>' : '<span class="text-slate-500">fresh</span>';
+          const cache = s.from_cache
+            ? '<span class="text-purple-300">cached</span>'
+            : '<span class="text-slate-500">fresh</span>';
           const outputStr = truncateText(JSON.stringify(s.output), 300);
+          const errorFlag = s.error ? ' · <span class="text-red-400">error</span>' : '';
           bodyHtml = `
   <div class="step-content">
-    <div class="mb-1"><code>${s.tool_name}</code> → ${s.duration_ms}ms · ${cache}</div>
-    <div class="opacity-70 text-xs font-mono">${outputStr}</div>
+    <div class="mb-1"><code>${esc(s.tool_name)}</code> → ${esc(s.duration_ms)}ms · ${cache}${errorFlag}</div>
+    <div class="opacity-70 text-xs font-mono">${esc(outputStr)}</div>
+  </div>`;
+        } else if (s.type === 'report') {
+          const output = s.output || {};
+          bodyHtml = `
+  <div class="step-content">
+    <div class="mb-1">判定 <span class="risk-badge risk-${riskClassOf(output.risk_level)}">${esc(output.risk_level)}</span></div>
+    <div class="opacity-70 text-xs">${esc(truncateText(String(output.summary || ''), 200))}</div>
   </div>`;
         }
 
+        const type = ['thinking', 'tool_call', 'tool_result', 'report'].includes(s.type) ? s.type : 'tool_call';
+
         return `
-  <div class="timeline-step ${s.type} slide-in" style="animation-delay: ${i * 60}ms;">
+  <div class="timeline-step ${type} slide-in" style="animation-delay: ${i * 60}ms;">
     <div class="step-header">
-      <span>iter ${s.iteration}</span>
-      <span>${new Date(s.timestamp).toLocaleTimeString('en-US', { hour12: false })}</span>
+      <span>iter ${esc(s.iteration)}</span>
+      <span>${esc(formatClock(s.timestamp))}</span>
     </div>
-    <div class="step-title">${iconMap[s.type]} ${titleMap[s.type]}</div>
+    <div class="step-title">${iconMap[type]} ${titleMap[type]}</div>
     ${bodyHtml}
   </div>`;
       }).join('');
@@ -765,19 +860,23 @@
     <div></div>
   </div>`;
 
-      const rowsHtml = list.map(b => `
+      const rowsHtml = list.map(b => {
+        const source = b.added_by === 'agent' ? '🤖 AGENT' : '👤 MANUAL';
+        const sourceClass = b.added_by === 'agent' ? 'agent' : 'manual';
+        return `
   <div class="blocklist-row fade-in">
     <div class="min-w-0">
-      <div class="font-mono text-sky-300 mb-0.5">${b.target}
-        <span class="text-xs text-slate-500">(${(b.target_type || '').toUpperCase()})</span>
+      <div class="font-mono text-sky-300 mb-0.5">${esc(b.target)}
+        <span class="text-xs text-slate-500">(${esc(String(b.target_type || '').toUpperCase())})</span>
       </div>
-      <div class="text-xs text-slate-500 truncate">${b.reason}</div>
+      <div class="text-xs text-slate-500 truncate">${esc(b.reason)}</div>
     </div>
-    <div><span class="risk-badge risk-${b.risk_level.toLowerCase()}">${b.risk_level}</span></div>
-    <div><span class="badge-source ${b.added_by}">${b.added_by === 'agent' ? '🤖 AGENT' : '👤 MANUAL'}</span></div>
-    <div class="text-xs text-slate-400">${formatDate(b.expires_at)}</div>
-    <div><button class="icon-btn" onclick="removeFromBlocklist('${b.target}')" title="移除">✕</button></div>
-  </div>`).join('');
+    <div><span class="risk-badge risk-${riskClassOf(b.risk_level)}">${esc(b.risk_level)}</span></div>
+    <div><span class="badge-source ${sourceClass}">${esc(source)}</span></div>
+    <div class="text-xs text-slate-400">${esc(formatDate(b.expires_at))}</div>
+    <div><button class="icon-btn" data-action="remove-block" data-target="${esc(b.target)}" title="移除">✕</button></div>
+  </div>`;
+      }).join('');
 
       document.getElementById('blocklistList').innerHTML = headerHtml + rowsHtml;
     }
@@ -798,25 +897,20 @@
       document.getElementById('analyzeBtnText').innerHTML = '<span class="spinner"></span> Analyzing...';
 
       try {
-        // ① 建立分析
         const data = await apiCall('POST', '/analyses', { target });
 
-        // ② 抓思考過程
-        const thinkingResp = await apiCall('GET', `/analyses/${data.analysis_id}/thinking`);
+        const thinkingResp = await apiCall('GET', `/analyses/${encodeURIComponent(data.analysis_id)}/thinking`);
         const steps = thinkingResp.steps || [];
 
-        // ③ 渲染
         currentAnalysis = data;
         renderReport(data);
         renderTimeline(steps);
         document.getElementById('resultBox').classList.remove('hidden');
 
-        // ④ HIGH 提示
         if (data.result.risk_level === 'HIGH') {
           showToast('已自動加入黑名單', 'success');
         }
 
-        // ⑤ 重新抓 stats + history(拿最新的)
         await refreshStats();
         await refreshHistory();
 
@@ -851,13 +945,12 @@
 
     async function showHistoryDetail(id) {
       try {
-        // 切回 analyze tab
         document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === 'analyze'));
         document.querySelectorAll('[id^="tab-"]').forEach(s => s.classList.toggle('hidden', s.id !== 'tab-analyze'));
 
-        // 抓完整分析
-        const data = await apiCall('GET', `/analyses/${id}`);
-        const thinkingResp = await apiCall('GET', `/analyses/${id}/thinking`);
+        const encoded = encodeURIComponent(id);
+        const data = await apiCall('GET', `/analyses/${encoded}`);
+        const thinkingResp = await apiCall('GET', `/analyses/${encoded}/thinking`);
 
         currentAnalysis = data;
         document.getElementById('emptyBox').classList.add('hidden');
@@ -872,7 +965,7 @@
     async function removeFromBlocklist(target) {
       if (!confirm(`確定要移除 ${target} 嗎?`)) return;
       try {
-        await apiCall('DELETE', `/blocklist/${target}`);
+        await apiCall('DELETE', `/blocklist/${encodeURIComponent(target)}`, null, { admin: true });
         showToast(`已移除 ${target}`, 'success');
         await refreshBlocklist();
         await refreshStats();
@@ -887,7 +980,7 @@
 
     async function refreshStats() {
       try {
-        const stats = await apiCall('GET', '/system/stats', null, false);
+        const stats = await apiCall('GET', '/system/stats');
         renderStats(stats);
       } catch (err) {
         console.error('refresh stats failed:', err);
@@ -897,7 +990,7 @@
     async function refreshHistory() {
       try {
         const resp = await apiCall('GET', '/analyses?limit=50');
-        historyCache = resp.items || resp; // 支援兩種格式
+        historyCache = resp.items || resp;
         renderHistory(historyCache);
       } catch (err) {
         console.error('refresh history failed:', err);
@@ -917,12 +1010,11 @@
     async function checkConnection() {
       const el = document.getElementById('apiStatus');
       try {
-        await apiCall('GET', '/system/health', null, false);
-        el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background: var(--success);"></span><span>API
-    Connected</span>`;
+        const health = await apiCall('GET', '/system/health');
+        const ok = health.status === 'ok';
+        el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background: ${ok ? 'var(--success)' : 'var(--warn)'};"></span><span>${ok ? 'API Connected' : 'API Degraded'}</span>`;
       } catch {
-        el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background: var(--danger);"></span><span
-    class="text-red-400">API Disconnected</span>`;
+        el.innerHTML = `<span class="inline-block w-2 h-2 rounded-full" style="background: var(--danger);"></span><span class="text-red-400">API Disconnected</span>`;
       }
     }
 
@@ -932,22 +1024,68 @@
 
     function formatTime(iso) {
       const d = new Date(iso);
+      if (isNaN(d)) return '';
       const diff = (new Date() - d) / 1000;
-      if (diff < 60) return '剛剛'; if (diff < 3600) return `${Math.floor(diff / 60)} 分前`; if (diff < 86400) return
-      `${Math.floor(diff / 3600)} 小時前`; return d.toLocaleDateString();
-    } function formatDate(iso) {
-      return new
-        Date(iso).toISOString().slice(0, 10);
-    } function showToast(msg, type) {
+      if (diff < 60) return '剛剛';
+      if (diff < 3600) return `${Math.floor(diff / 60)} 分前`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)} 小時前`;
+      return d.toLocaleDateString();
+    }
+
+    function formatDate(iso) {
+      const d = new Date(iso);
+      return isNaN(d) ? '' : d.toISOString().slice(0, 10);
+    }
+
+    function formatClock(iso) {
+      const d = new Date(iso);
+      return isNaN(d) ? '' : d.toLocaleTimeString('en-US', { hour12: false });
+    }
+
+    function showToast(msg, type) {
       const t = document.createElement('div');
-      t.className = `toast ${type === 'error' ? 'error' : ''}`; t.textContent = msg; document.body.appendChild(t);
+      t.className = `toast ${type === 'error' ? 'error' : ''}`;
+      t.textContent = msg;
+      document.body.appendChild(t);
       setTimeout(() => t.remove(), 2500);
     }
+
+    /* ============================================================
+    EVENT DELEGATION
+    ------------------------------------------------------------
+    動態列表改用 data-* 屬性 + 委派,而不是把值直接串進 onclick 字串裡 ——
+    後者只要目標含有單引號就能跳出字串常值執行任意程式碼。
+    ============================================================ */
+    document.addEventListener('click', (event) => {
+      const el = event.target.closest('[data-action]');
+      if (!el) return;
+
+      if (el.dataset.action === 'show-analysis') {
+        showHistoryDetail(el.dataset.analysisId);
+      } else if (el.dataset.action === 'remove-block') {
+        removeFromBlocklist(el.dataset.target);
+      }
+    });
 
     /* ============================================================
     INIT
     ============================================================ */
     window.addEventListener('DOMContentLoaded', async () => {
+      const saveBtn = document.getElementById('saveAdminKeyBtn');
+      const clearBtn = document.getElementById('clearAdminKeyBtn');
+      const input = document.getElementById('adminKeyInput');
+
+      if (saveBtn) saveBtn.addEventListener('click', () => {
+        setAdminKey(input.value.trim());
+        input.value = '';
+        showToast('Admin Key 已儲存於本分頁', 'success');
+      });
+      if (clearBtn) clearBtn.addEventListener('click', () => {
+        setAdminKey('');
+        showToast('Admin Key 已清除', 'success');
+      });
+      renderAdminKeyStatus();
+
       await checkConnection();
       await refreshStats();
       await refreshHistory();
