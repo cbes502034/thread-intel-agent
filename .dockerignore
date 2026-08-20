@@ -1,5 +1,13 @@
 .env
+.env.*
+!.env.example
 __pycache__
 *.pyc
 .git
 .gitignore
+.github
+.pytest_cache
+tests
+docs
+README.md
+requirements-dev.txt
