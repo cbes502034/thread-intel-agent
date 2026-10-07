@@ -36,7 +36,6 @@ class AI(AgentConfig):
                   self.VIRUSTOTAL_IP+
                    self.VIRUSTOTAL_DOMAIN,
             system=self.AI_SYSTEM_PROMPT,
-            # tool_choice={"type":"tool", "name":"submit_report"}
         )
         iterations+=1
         

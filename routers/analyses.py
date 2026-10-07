@@ -35,7 +35,6 @@ async def create_analysis(request: Request, _: str=Depends(verify_api_key)):
     body = await request.json()
     target = body.get("target", "") 
     ai = AI(target, request.app.state.cache, request.app.state.tool_calls)
-    # analysis_id, now = get_analysis_id(return_now=True)
     await ai.run()
     doc = {
         "analysis_id": ai.analysis_id,

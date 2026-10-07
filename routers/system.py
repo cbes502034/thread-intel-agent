@@ -7,15 +7,6 @@ async def health():
     return {"status": "ok"}
 
 
-# @router.get("/stats")
-# async def stats():
-#     return {
-#         "total_analyses": 0,
-#         "high_risk_ratio": 0.0,
-#         "cache_hit_rate": 0.0,
-#         "blocklist_size": 0
-#     }
-
 @router.get("/stats")
 async def stats(request: Request):
     analyses_collection = request.app.state.analyses
