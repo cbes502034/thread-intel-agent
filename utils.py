@@ -33,7 +33,11 @@ def iscache(name):
             if cache:
                 return cache, (True, )
             result = await fun(arg, collection)
-            await set_cache(collection, cache_key, result)
+            # 查詢失敗（例如 429 額度用盡、401）不寫入快取：
+            # 失敗結果一旦被快取,接下來 24 小時查同一目標都會拿到這筆錯誤,
+            # 造成「昨天判安全、今天判危險」的不一致。失敗就讓下一次重查。
+            if not (isinstance(result, dict) and "error" in result):
+                await set_cache(collection, cache_key, result)
             return result, (False, )
         return wrap
     return decorator

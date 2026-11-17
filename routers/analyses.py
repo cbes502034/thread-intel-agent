@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from agent import AI
 from datetime import timedelta
 from config import BLOCKLIST_EXPIRE_DAYS
+from evidence import validate_target
 from utils import verify_api_key
 router = APIRouter(prefix="/analyses")
 
@@ -33,7 +34,10 @@ async def get_analyses(request: Request):
 @router.post("")
 async def create_analysis(request: Request, _: str=Depends(verify_api_key)):
     body = await request.json()
-    target = body.get("target", "") 
+    kind, target = validate_target(body.get("target", ""))
+    if kind is None:
+        # target 此時是錯誤訊息。先擋下格式不對的輸入,不進模型、不耗外部 API 額度
+        raise HTTPException(status_code=422, detail=target)
     ai = AI(target, request.app.state.cache, request.app.state.tool_calls)
     await ai.run()
     doc = {

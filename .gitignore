@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 微調產物（基底權重、LoRA、GGUF，太大不進版控）
+finetune/artifacts/
+# 文件產生的中間檔
+docs/build/
